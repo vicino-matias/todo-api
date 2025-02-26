@@ -19,55 +19,60 @@ func main() {
 	// Cargamos configuraciones
 	cfg, err := configs.LoadConfig()
 	if err != nil {
-		log.Fatalf("Error al cargar las configuraciones: %v", err)
+		log.Fatalf("❌Error al cargar las configuraciones: %v", err)
 	}
+
 	// Inicializar la base de datos
-	dsn := buildDSN(cfg)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Fatalf("Error al conectar la base de datos: %v", err)
-	}
+	db := initDatabase(cfg)
 
-	//Migrar el modelo de To Do (crear la tabla si no existe)
-	if err := db.AutoMigrate(&models.Todo{}); err != nil {
-		log.Fatalf("Error al migrar la base de datos: %v", err)
-	}
-
-	// Inicializar el repositorio
 	todoRepo := repositories.NewTodoRepository(db)
-
-	// Inicializar servicio
-	todoService := services.NewTodoService(*todoRepo)
-
-	// Inicializar los handlers
+	todoService := services.NewTodoService(todoRepo)
 	todoHandler := handlers.NewTodoHandler(*todoService)
 
-	//Inicializar servidor
+	// Inicializar servidor HTTP
 	r := gin.Default()
 
-	// Middleware para manejo de errores centralizados
-	r.Use(func(c *gin.Context) {
-		c.Next()
+	// Middleware para manejo de errores
+	r.Use(errorHandlerMiddleware)
 
-		// Verificar si hubo algun error durante el proceso
-		if len(c.Errors) > 0 {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": c.Errors.JSON(),
-			})
-		}
-	})
+	// Registrar rutas de la API
 
-	// Registra rutas
 	routes.RegisterRoutes(r, todoHandler)
 
-	//Correr servidor
-	log.Printf("Servidor corriendo en http://localhost:%s", cfg.ServerPort)
+	// Iniciar servidor
+	log.Printf("🚀 Servidor corriendo en http://localhost:%s", cfg.ServerPort)
 	if err := r.Run(":" + cfg.ServerPort); err != nil {
-		log.Fatalf("Error al iniciar el servidor: %v", err)
+		log.Fatalf("❌ Error al iniciar el servidor: %v", err)
 	}
 }
 
-// Construye la cadena de conexion (DSN) para PostgreSQL
+// Funcion para inicializar la base de datos
+func initDatabase(cfg *configs.Config) *gorm.DB {
+	dsn := buildDSN(cfg)
+
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("❌Error al conectar la base de datos: %v", err)
+	}
+
+	//Migrar el modelos
+	if err := db.AutoMigrate(&models.Todo{}); err != nil {
+		log.Fatalf("❌Error al migrar la base de datos: %v", err)
+	}
+
+	log.Println("✅ Base de datos conectada y migrada correctamente")
+	return db
+}
+
+// Funcion middleware centralizado para manejo de errores
+func errorHandlerMiddleware(c *gin.Context) {
+	c.Next()
+	if len(c.Errors) > 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": c.Errors.JSON()})
+	}
+}
+
+// Construye la cadena de conexiones (DSN) para PostgreSQL
 func buildDSN(cfg *configs.Config) string {
 	return "host=" + cfg.DBHost +
 		" user=" + cfg.DBUser +

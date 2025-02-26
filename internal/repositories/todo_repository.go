@@ -32,32 +32,27 @@ func (r *TodoRepository) GetAll() ([]models.Todo, error) {
 
 // Crea un nuevo To Do
 func (r *TodoRepository) Create(todo *models.Todo) error {
-	// Validar que el titulo no este vacio
 	if todo.Title == "" {
-		return errors.New("el titulo es requerido")
+		return errors.New("el título es requerido")
 	}
 
-	// Validar que el To Do no exista ya
-	existingTodo, err := r.GetByTitle(todo.Title)
-	if err != nil && !errors.Is(err, ErrNotFound) {
+	// Verifica si el To Do ya existe
+	exists, err := r.ExistsByTitle(todo.Title)
+	if err != nil {
 		return err
 	}
-	if existingTodo != nil {
+	if exists {
 		return ErrConflict
 	}
 
-	// Crear el todo
 	return r.DB.Create(todo).Error
 }
 
 // Obtiene un To Do por su ID
 func (r *TodoRepository) GetByID(id string) (*models.Todo, error) {
 	var todo models.Todo
-	if err := r.DB.First(&todo, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, err
+	if err := r.DB.First(&todo, "id = ?", id).Error; err != nil {
+		return nil, r.handleDBError(err)
 	}
 	return &todo, nil
 }
@@ -74,9 +69,9 @@ func (r *TodoRepository) Update(id string, updates map[string]interface{}) error
 	return nil
 }
 
-// Elimina un To Do Existente
+// Elimina un To Do existente
 func (r *TodoRepository) Delete(id string) error {
-	result := r.DB.Delete(&models.Todo{}, id)
+	result := r.DB.Delete(&models.Todo{}, "id = ?", id)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -86,14 +81,28 @@ func (r *TodoRepository) Delete(id string) error {
 	return nil
 }
 
-// Obtiene un To Do por su titulo
+// Obtiene un To Do por su título
 func (r *TodoRepository) GetByTitle(title string) (*models.Todo, error) {
 	var todo models.Todo
 	if err := r.DB.Where("title = ?", title).First(&todo).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, ErrNotFound
-		}
-		return nil, err
+		return nil, r.handleDBError(err)
 	}
 	return &todo, nil
+}
+
+// Verifica si un To Do con el mismo título ya existe
+func (r *TodoRepository) ExistsByTitle(title string) (bool, error) {
+	var count int64
+	if err := r.DB.Model(&models.Todo{}).Where("title = ?", title).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// Maneja errores de base de datos y los traduce a errores del repositorio
+func (r *TodoRepository) handleDBError(err error) error {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return ErrNotFound
+	}
+	return err
 }

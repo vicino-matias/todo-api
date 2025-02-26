@@ -2,11 +2,13 @@ package configs
 
 import (
 	"fmt"
-	//"log"
+	"log"
 	"os"
 
 	"gopkg.in/yaml.v3"
 )
+
+// Estructura de la configuracion
 
 type Config struct {
 	ServerPort string `yaml:"server_port"`
@@ -17,26 +19,63 @@ type Config struct {
 	DBName     string `yaml:"db_name"`
 }
 
+// Cargar configuraciones desde el archivo y variables de entorno
 func LoadConfig() (*Config, error) {
-	// Cargar las configuraciones del archivo YAML
-	configFile, err := os.ReadFile("configs/config.yaml")
+	configPath := getConfigPath()
+
+	// Leer configuraciones desde el archivo YAML
+
+	cfg, err := loadConfigFromFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("error al leer el archivo de configuraciones: %v", err)
+		return nil, err
 	}
 
+	// Validar configuracion
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
+
+	// Sobrescribir con variables de entorno
+	overrideWithEnv(cfg)
+	return cfg, nil
+}
+
+// Obtiene la ruta del archivo de configuracion
+func getConfigPath() string {
+	if path := os.Getenv("CONFIG_PATH"); path != "" {
+		return path
+	}
+	return "configs/config.yaml"
+
+}
+
+// Cargar la configuracion desde el archivo YAML
+func loadConfigFromFile(path string) (*Config, error) {
+	configFile, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("❌error al leer el archivo de configuraciones: %v", err)
+	}
 	var cfg Config
 	if err := yaml.Unmarshal(configFile, &cfg); err != nil {
-		return nil, fmt.Errorf("error al decodificar el archivo de configuracion: %v", err)
-	}
+		return nil, fmt.Errorf("❌error al decodificar el archivo de configuracion: %v", err)
 
-	// Validar configuraciones
+	}
+	return &cfg, nil
+}
+
+// Validar los valores esenciales de la configuracion
+func validateConfig(cfg *Config) error {
 	if cfg.ServerPort == "" {
-		return nil, fmt.Errorf("server_port es requerido")
+		return fmt.Errorf("❌server_port es requerido")
 	}
 	if cfg.DBHost == "" || cfg.DBPort == "" || cfg.DBUser == "" || cfg.DBName == "" {
-		return nil, fmt.Errorf("configuracion de la base de datos incompletas")
+		return fmt.Errorf("❌configuracion de la base de datos incompletas")
 	}
-	// Sobreescribir con variables de entorno
+	return nil
+}
+
+// Sobrescribir la configuracion de variables de entorno
+func overrideWithEnv(cfg *Config) {
 	if port := os.Getenv("SERVER_PORT"); port != "" {
 		cfg.ServerPort = port
 	}
@@ -55,6 +94,5 @@ func LoadConfig() (*Config, error) {
 	if dbName := os.Getenv("DB_NAME"); dbName != "" {
 		cfg.DBName = dbName
 	}
-
-	return &cfg, nil
+	log.Println("✅ Variables de entorno aplicadas (si existen)")
 }

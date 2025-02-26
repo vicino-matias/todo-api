@@ -8,37 +8,29 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// healthCheckHandler responde con un estado OK
+func healthCheckHandler(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// loggingMiddleware registra cada solicitud HTTP
+func loggingMiddleware(c *gin.Context) {
+	log.Printf("Solicitud recibida: %s %s", c.Request.Method, c.Request.URL.Path)
+	c.Next()
+}
+
+// RegisterRoutes configura las rutas de la API
 func RegisterRoutes(r *gin.Engine, todoHandler *handlers.TodoHandler) {
+	// Ruta para verificar el estado del servicio
+	r.GET("/health", healthCheckHandler)
 
-	// Ruta para health check
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
+	// Grupo de rutas de la API v1
+	v1 := r.Group("/api/v1", loggingMiddleware)
 
-	// Grupo de rutas para la API
-	v1 := r.Group("/api/v1")
-	{
-		// Middleware de logging
-		v1.Use(func(c *gin.Context) {
-			log.Printf("Solicitud recibida: %s %s", c.Request.Method, c.Request.URL.Path)
-			c.Next()
-		})
-
-		// Rutas de la API
-
-		//Obtener todos los To Do's
-		v1.GET("/todos", todoHandler.GetTodos)
-
-		// Crear un nuevo To Do
-		v1.POST("/todos", todoHandler.CreateTodo)
-
-		// Obtener un To Do por su ID
-		v1.GET("/todos/:id", todoHandler.GetTodoByID)
-
-		// Actualizar un To Do existente
-		v1.PUT("/todos/:id", todoHandler.UpdateTodo)
-
-		// Eliminar un To Do por su ID
-		v1.DELETE("/todos/:id", todoHandler.DeleteTodo)
-	}
+	// Rutas CRUD para To Do's
+	v1.GET("/todos", todoHandler.GetTodos)          // Obtener todos los To Do's
+	v1.POST("/todos", todoHandler.CreateTodo)       // Crear un nuevo To Do
+	v1.GET("/todos/:id", todoHandler.GetTodoByID)   // Obtener un To Do por ID
+	v1.PUT("/todos/:id", todoHandler.UpdateTodo)    // Actualizar un To Do
+	v1.DELETE("/todos/:id", todoHandler.DeleteTodo) // Eliminar un To Do por ID
 }
